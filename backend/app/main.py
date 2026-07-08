@@ -1,0 +1,26 @@
+from fastapi import FastAPI
+from app.core.config import settings
+from app.domains.auth.router import router as auth_router
+from app.domains.users.router import router as users_router
+from app.domains.groups.router import router as groups_router
+from app.domains.plans.router import router as plans_router
+
+app = FastAPI(title=settings.APP_NAME, version="0.1.0")
+
+app.include_router(auth_router,
+                   prefix=f"{settings.API_V1_PREFIX}/auth",
+                   tags=["Auth"])
+app.include_router(users_router,
+                   prefix=f"{settings.API_V1_PREFIX}/users",
+                   tags=["Users"])
+app.include_router(groups_router,
+                   prefix=f"{settings.API_V1_PREFIX}/groups",
+                   tags=["Groups"])
+app.include_router(plans_router,
+                   prefix=f"{settings.API_V1_PREFIX}/plans",
+                   tags=["Plans"])
+
+
+@app.get("/")
+async def root():
+    return {"message": "MealPlan AI API", "docs": "/docs"}
