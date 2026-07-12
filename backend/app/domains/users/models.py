@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -19,10 +19,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    allergies: Mapped[list] = mapped_column(JSONB, default=list)
-    hated_products: Mapped[list] = mapped_column(JSONB, default=list)
-    disliked_products: Mapped[list] = mapped_column(JSONB, default=list)
-    liked_products: Mapped[list] = mapped_column(JSONB, default=list)
+    allergies: Mapped[list] = mapped_column(JSON, default=list)
+    hated_products: Mapped[list] = mapped_column(JSON, default=list)
+    disliked_products: Mapped[list] = mapped_column(JSON, default=list)
+    liked_products: Mapped[list] = mapped_column(JSON, default=list)
     location: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime,

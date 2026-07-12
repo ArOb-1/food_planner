@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -19,7 +19,7 @@ class MealPlan(Base):
                                                        ForeignKey("groups.id"),
                                                        nullable=True)
 
-    plan_data: Mapped[dict] = mapped_column(JSONB,
+    plan_data: Mapped[dict] = mapped_column(JSON,
                                             default=dict)
     days: Mapped[int] = mapped_column(default=7)
     status: Mapped[str] = mapped_column(String,

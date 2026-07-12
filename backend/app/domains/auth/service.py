@@ -1,9 +1,15 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
+from jose import jwt, JWTError
+
+from app.core.config import settings
 from app.domains.users.models import User
 from app.domains.auth.schemas import UserRegister, UserLogin, TokenResponse
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.security import (
+    hash_password, verify_password, create_access_token,
+    create_refresh_token, decode_access_token
+)
 
 
 class AuthService:
@@ -46,4 +52,25 @@ class AuthService:
         return TokenResponse(
             access_token=create_access_token(str(user.id)),
             refresh_token=create_refresh_token(str(user.id)),
+        )
+
+    async def refresh(self, refresh_token: str) -> TokenResponse:
+        user_id = decode_access_token(refresh_token)
+        if user_id is None:
+            raise HTTPException(status_code=401,
+                                detail="Invalid refresh token")
+
+        try:
+            payload = jwt.decode(refresh_token,
+                                 settings.JWT_SECRET_KEY,
+                                 algorithms=[settings.JWT_ALGORITHM])
+            if payload.get("type") != "refresh":
+                raise HTTPException(status_code=401,
+                                    detail="Not a refresh token")
+        except JWTError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        return TokenResponse(
+            access_token=create_access_token(user_id),
+            refresh_token=create_refresh_token(user_id),
         )

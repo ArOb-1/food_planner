@@ -4,6 +4,8 @@ from datetime import datetime
 
 
 class PlanGenerateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     days: int = 7
     is_group: bool = False
     group_id: UUID | None = None

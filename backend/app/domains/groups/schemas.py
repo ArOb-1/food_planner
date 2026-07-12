@@ -4,11 +4,15 @@ from datetime import datetime
 
 
 class GroupCreate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     name: str
     member_ids: list[UUID] = []
 
 
 class GroupAddMember(BaseModel):
+    model_config = {"extra": "forbid"}
+
     user_id: UUID
 
 

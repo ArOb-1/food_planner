@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -17,7 +17,7 @@ class Group(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True),
                                                 ForeignKey("users.id"),
                                                 nullable=False)
-    member_ids: Mapped[list] = mapped_column(JSONB,
+    member_ids: Mapped[list] = mapped_column(JSON,
                                              default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime,
                                                  default=datetime.utcnow)

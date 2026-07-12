@@ -19,6 +19,8 @@ class UserOut(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+
     allergies: list[str] | None = None
     liked_products: list[str] | None = None
     disliked_products: list[str] | None = None
