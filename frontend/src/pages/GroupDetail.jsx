@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import client from '../api/client'
 import toast from 'react-hot-toast'
+import ConfirmModal from '../components/ConfirmModal'
 
 export default function GroupDetail() {
   const { id } = useParams()
@@ -23,6 +24,10 @@ export default function GroupDetail() {
   const [genProducts, setGenProducts] = useState('')
   const [genCuisine, setGenCuisine] = useState('')
   const [generating, setGenerating] = useState(false)
+
+  const [deleteMemberId, setDeleteMemberId] = useState(null)
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false)
+  const [deletePlanId, setDeletePlanId] = useState(null)
 
   const fetchGroup = async () => {
     const { data } = await client.get(`/groups/${id}`)
@@ -87,6 +92,7 @@ export default function GroupDetail() {
       setEmail('')
       setSuggestions([])
       setShowSuggestions(false)
+      toast.success('Участник добавлен')
       fetchGroup()
     } catch {
       toast.error('Ошибка добавления')
@@ -106,30 +112,35 @@ export default function GroupDetail() {
     }
   }
 
-  const handleRemoveMember = async (userId) => {
-    if (!confirm('Удалить участника?')) return
+  const handleRemoveMemberConfirm = async () => {
+    if (!deleteMemberId) return
     try {
-      await client.delete(`/groups/${id}/members/${userId}`)
+      await client.delete(`/groups/${id}/members/${deleteMemberId}`)
+      toast.success('Участник удалён')
       fetchGroup()
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Ошибка удаления')
     }
+    setDeleteMemberId(null)
   }
 
-  const handleDeleteGroup = async () => {
-    if (!confirm('Удалить группу навсегда?')) return
+  const handleDeleteGroupConfirm = async () => {
     try {
       await client.delete(`/groups/${id}`)
+      toast.success('Группа удалена')
       navigate('/groups')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Ошибка удаления')
     }
+    setDeleteGroupOpen(false)
   }
 
-  const handleDeletePlan = async (planId) => {
-    if (!confirm('Удалить план?')) return
-    await client.delete(`/plans/${planId}`)
+  const handleDeletePlanConfirm = async () => {
+    if (!deletePlanId) return
+    await client.delete(`/plans/${deletePlanId}`)
+    toast.success('План удалён')
     fetchGroup()
+    setDeletePlanId(null)
   }
 
   const toggleMeal = (meal) => {
@@ -173,7 +184,7 @@ export default function GroupDetail() {
             Сгенерировать план
           </button>
           <button
-            onClick={handleDeleteGroup}
+            onClick={() => setDeleteGroupOpen(true)}
             className="text-red-500 hover:underline text-sm"
           >
             Удалить группу
@@ -275,13 +286,13 @@ export default function GroupDetail() {
                   }`}>
                     {plan.status === 'completed' ? 'Готов' : plan.status === 'failed' ? 'Ошибка' : '...'}
                   </span>
-                  {plan.status === 'completed' && (
+                  {plan.status !== 'failed' && (
                     <Link to={`/plans/${plan.id}`} className="text-green-600 hover:underline text-sm">
-                      Смотреть
+                      {plan.status === 'completed' ? 'Смотреть' : 'Статус'}
                     </Link>
                   )}
                   <button
-                    onClick={() => handleDeletePlan(plan.id)}
+                    onClick={() => setDeletePlanId(plan.id)}
                     className="text-red-500 hover:underline text-xs"
                   >
                     Удалить
@@ -307,7 +318,7 @@ export default function GroupDetail() {
                 </span>
                 {member.id !== group.owner_id && (
                   <button
-                    onClick={() => handleRemoveMember(member.id)}
+                    onClick={() => setDeleteMemberId(member.id)}
                     className="text-red-500 hover:underline text-sm"
                   >
                     Удалить
@@ -358,6 +369,30 @@ export default function GroupDetail() {
           </div>
         </form>
       </div>
+
+      <ConfirmModal
+        isOpen={!!deleteMemberId}
+        onClose={() => setDeleteMemberId(null)}
+        onConfirm={handleRemoveMemberConfirm}
+        title="Удалить участника?"
+        message="Участник будет удалён из группы."
+      />
+
+      <ConfirmModal
+        isOpen={deleteGroupOpen}
+        onClose={() => setDeleteGroupOpen(false)}
+        onConfirm={handleDeleteGroupConfirm}
+        title="Удалить группу?"
+        message="Группа и все её планы будут удалены навсегда."
+      />
+
+      <ConfirmModal
+        isOpen={!!deletePlanId}
+        onClose={() => setDeletePlanId(null)}
+        onConfirm={handleDeletePlanConfirm}
+        title="Удалить план?"
+        message="Это действие нельзя отменить."
+      />
     </div>
   )
 }

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import client from '../api/client'
+import toast from 'react-hot-toast'
+import ConfirmModal from '../components/ConfirmModal'
 
 export default function MyPlans() {
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
+  const [deleteId, setDeleteId] = useState(null)
 
   useEffect(() => {
     client.get('/plans/')
@@ -13,10 +16,12 @@ export default function MyPlans() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleDelete = async (id) => {
-    if (!confirm('Удалить план?')) return
-    await client.delete(`/plans/${id}`)
-    setPlans(prev => prev.filter(p => p.id !== id))
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return
+    await client.delete(`/plans/${deleteId}`)
+    setPlans(prev => prev.filter(p => p.id !== deleteId))
+    setDeleteId(null)
+    toast.success('План удалён')
   }
 
   if (loading) return <div className="p-8">Загрузка...</div>
@@ -51,15 +56,13 @@ export default function MyPlans() {
               </div>
               <div className="flex gap-4 mt-3">
                 {plan.status !== 'failed' && (
-                  <Link
-                    to={`/plans/${plan.id}`}
-                    className="text-green-600 hover:underline text-sm font-medium"
-                  >
+                  <Link to={`/plans/${plan.id}`}
+                    className="text-green-600 hover:underline text-sm font-medium">
                     {plan.status === 'completed' ? 'Посмотреть план →' : 'Смотреть статус →'}
                   </Link>
                 )}
                 <button
-                  onClick={() => handleDelete(plan.id)}
+                  onClick={() => setDeleteId(plan.id)}
                   className="text-red-500 hover:underline text-sm"
                 >
                   Удалить
@@ -69,6 +72,14 @@ export default function MyPlans() {
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Удалить план?"
+        message="Это действие нельзя отменить."
+      />
     </div>
   )
 }
