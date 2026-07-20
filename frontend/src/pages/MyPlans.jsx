@@ -50,10 +50,12 @@ export default function MyPlans() {
                 <span>📋 {plan.meals?.length || 0} приёмов</span>
               </div>
               <div className="flex gap-4 mt-3">
-                {plan.status === 'completed' && (
-                  <Link to={`/plans/${plan.id}`}
-                    className="text-green-600 hover:underline text-sm font-medium">
-                    Посмотреть план →
+                {plan.status !== 'failed' && (
+                  <Link
+                    to={`/plans/${plan.id}`}
+                    className="text-green-600 hover:underline text-sm font-medium"
+                  >
+                    {plan.status === 'completed' ? 'Посмотреть план →' : 'Смотреть статус →'}
                   </Link>
                 )}
                 <button
