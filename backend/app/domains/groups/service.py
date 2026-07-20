@@ -1,6 +1,6 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, cast, String
 from fastapi import HTTPException, status
 from app.domains.groups.models import Group
 from app.domains.groups.schemas import GroupCreate, GroupProfileOut
@@ -26,9 +26,11 @@ class GroupsService:
         await self.session.refresh(group)
         return group
 
-    async def get_my_groups(self, user_id: UUID):
+    async def get_my_groups(self, user_id: UUID) -> list[Group]:
         result = await self.session.execute(
-            select(Group).where(Group.member_ids.contains([str(user_id)]))
+            select(Group).where(
+                cast(Group.member_ids, String).like(f'%"{user_id}"%')
+            )
         )
         return list(result.scalars().all())
 
@@ -48,8 +50,15 @@ class GroupsService:
             await self.session.refresh(group)
         return group
 
-    async def remove_member(self, group_id: UUID, user_id: UUID) -> Group:
+    async def remove_member(self, group_id: UUID, user_id: UUID, removed_by: UUID) -> Group:
         group = await self.get_group(group_id)
+
+        if len(group.member_ids) <= 1:
+            raise HTTPException(status_code=400, detail="Нельзя удалить последнего участника")
+
+        if str(removed_by) != str(group.owner_id) and str(removed_by) != str(user_id):
+            raise HTTPException(status_code=403, detail="Нет прав на удаление")
+
         group.member_ids = [m for m in group.member_ids if str(m) != str(user_id)]
         await self.session.commit()
         await self.session.refresh(group)
@@ -84,3 +93,10 @@ class GroupsService:
             priority=list(priority),
             neutral=[],
         )
+
+    async def delete_group(self, group_id: UUID, user_id: UUID) -> None:
+        group = await self.get_group(group_id)
+        if group.owner_id != user_id:
+            raise HTTPException(status_code=403, detail="Только владелец может удалить группу")
+        await self.session.delete(group)
+        await self.session.commit()

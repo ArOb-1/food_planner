@@ -19,7 +19,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     REDIS_URL: str
-    OPENAI_API_KEY: str | None = None
+
+    YANDEX_API_KEY: str | None = None
+    YANDEX_FOLDER_ID: str | None = None
 
 
 settings = Settings()

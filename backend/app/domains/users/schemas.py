@@ -5,6 +5,7 @@ from datetime import datetime
 
 class UserOut(BaseModel):
     id: UUID
+    name: str | None = None
     email: EmailStr
     is_active: bool
     allergies: list[str]
@@ -21,6 +22,7 @@ class UserOut(BaseModel):
 class ProfileUpdate(BaseModel):
     model_config = {"extra": "forbid"}
 
+    name: str | None = None
     allergies: list[str] | None = None
     liked_products: list[str] | None = None
     disliked_products: list[str] | None = None

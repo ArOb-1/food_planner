@@ -9,6 +9,11 @@ class PlanGenerateRequest(BaseModel):
     days: int = 7
     is_group: bool = False
     group_id: UUID | None = None
+    cooking_time: int | None = None
+    meals: list[str] = ["breakfast", "lunch", "dinner"]
+    available_products: str | None = None
+    cuisine: str | None = None
+    correction_prompt: str | None = None
 
 
 class MealPlanOut(BaseModel):
@@ -18,6 +23,10 @@ class MealPlanOut(BaseModel):
     plan_data: dict
     days: int
     status: str
+    cooking_time: int | None = None
+    meals: list[str] = []
+    available_products: str | None = None
+    cuisine: str | None = None
     created_at: datetime
 
     class Config:
