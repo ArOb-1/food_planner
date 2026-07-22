@@ -12,6 +12,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Groups from './pages/Groups'
 import GroupDetail from './pages/GroupDetail'
 import { Toaster } from 'react-hot-toast'
+import Donate from './pages/Donate'
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/login" element={<Login />} />
           <Route element={<ProtectedRoute />}>
+            <Route path="/donate" element={<Donate />} />
             <Route path="/groups" element={<Groups />} />
             <Route path="/groups/:id" element={<GroupDetail />} />
             <Route path="/dashboard" element={<Dashboard />} />
