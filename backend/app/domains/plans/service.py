@@ -1,21 +1,21 @@
 import json
-import logging
 import traceback
-
 
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 
+from app.domains.plans.constants import VARIETY_HINTS, MEAL_NAMES, PROTEINS
 from app.domains.plans.models import MealPlan
 from app.domains.plans.schemas import PlanGenerateRequest
 from app.domains.plans.tasks import generate_plan_task
 from app.domains.users.models import User
 from app.domains.groups.service import GroupsService
 from app.shared.llm_client import generate_meal_plan
+from app.core.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class PlansService:
@@ -23,8 +23,8 @@ class PlansService:
         self.session = session
 
     async def create_plan_request(self,
-                                  user_id: UUID,
-                                  data: PlanGenerateRequest) -> MealPlan:
+                              user_id: UUID,
+                              data: PlanGenerateRequest) -> MealPlan:
         plan = MealPlan(
             user_id=user_id if not data.is_group else None,
             group_id=data.group_id if data.is_group else None,
@@ -39,93 +39,170 @@ class PlansService:
         await self.session.commit()
         await self.session.refresh(plan)
 
+        previous_dishes = await self._get_previous_dishes(
+            user_id=user_id,
+            group_id=data.group_id if data.is_group else None,
+            limit_plans=3,
+        )
+
         if data.is_group and data.group_id:
-            profile = (await GroupsService(self.session).
-                       get_group_profile(data.group_id))
-            profile_str = f"""Групповой профиль:
-- Запрещённые продукты (аллергии/ненавистные): {", ".join(profile.forbidden) if profile.forbidden else "нет"}
-- Приоритетные продукты: {", ".join(profile.priority) if profile.priority else "нет"}
-"""
-            prompt = self._build_prompt(profile_str, data)
+            profile = await GroupsService(self.session).get_group_profile(data.group_id)
+            profile_str = (
+                f"Групповой профиль:\n"
+                f"- Запрещённые продукты (аллергии/ненавистные): "
+                f"{', '.join(profile.forbidden) if profile.forbidden else 'нет'}\n"
+                f"- Приоритетные продукты: "
+                f"{', '.join(profile.priority) if profile.priority else 'нет'}\n"
+            )
         else:
-            result = (await self.
-                      session.
-                      execute(select(User).where(User.id == user_id)))
+            result = await self.session.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
-            profile_str = f"""Профиль пользователя:
-- Аллергии: {", ".join(user.allergies) if user.allergies else "нет"}
-- Любимые продукты: {", ".join(user.liked_products) if user.liked_products else "нет"}
-- Ненавистные продукты: {", ".join(user.hated_products) if user.hated_products else "нет"}
-- Нелюбимые: {", ".join(user.disliked_products) if user.disliked_products else "нет"}
-"""
-            prompt = self._build_prompt(profile_str, data)
+            profile_str = (
+                f"Профиль пользователя:\n"
+                f"- Аллергии: {', '.join(user.allergies) if user.allergies else 'нет'}\n"
+                f"- Любимые продукты: {', '.join(user.liked_products) if user.liked_products else 'нет'}\n"
+                f"- Ненавистные продукты: {', '.join(user.hated_products) if user.hated_products else 'нет'}\n"
+                f"- Нелюбимые: {', '.join(user.disliked_products) if user.disliked_products else 'нет'}\n"
+            )
 
+        prompt = self._build_prompt(profile_str, data, previous_dishes)
         generate_plan_task.delay(str(plan.id), prompt)
-
         return plan
 
+    async def _get_previous_dishes(self,
+                                user_id: UUID,
+                                group_id: UUID | None = None,
+                                limit_plans: int = 3) -> list[str]:
+        """
+        Возвращает список названий блюд из последних N планов.
+        Передаём в промпт как запрещённые для повтора.
+        """
+        try:
+            if group_id:
+                query = (
+                    select(MealPlan)
+                    .where(MealPlan.group_id == group_id,
+                        MealPlan.status == "completed")
+                    .order_by(MealPlan.created_at.desc())
+                    .limit(limit_plans)
+                )
+            else:
+                query = (
+                    select(MealPlan)
+                    .where(MealPlan.user_id == user_id,
+                        MealPlan.status == "completed")
+                    .order_by(MealPlan.created_at.desc())
+                    .limit(limit_plans)
+                )
+
+            result = await self.session.execute(query)
+            plans = result.scalars().all()
+
+            dishes = []
+            for plan in plans:
+                if not plan.plan_data:
+                    continue
+                for day in plan.plan_data.get("days", []):
+                    for meal in day.get("meals", []):
+                        name = meal.get("name", "").strip()
+                        if name:
+                            dishes.append(name)
+
+            return dishes
+
+        except Exception:
+            return []   
+
     def _build_prompt(self,
-                      profile_str: str,
-                      data: PlanGenerateRequest) -> str:
-        meal_names = {
-            "breakfast": "завтрак",
-            "lunch": "обед",
-            "dinner": "ужин",
-            "snack": "перекус",
-        }
-        meals_str = ", ".join(meal_names.get(m, m) for m in data.meals)
+                  profile_str: str,
+                  data: PlanGenerateRequest,
+                  previous_dishes: list[str] | None = None) -> str:
+        meals_str = ", ".join(MEAL_NAMES.get(m, m) for m in data.meals)
+        meals_count = len(data.meals)
 
-        prompt = f"""Ты — профессиональный диетолог. Составь сбалансированный план питания на {data.days} дней.
+        variety_block = "\n".join(
+            f'  - {MEAL_NAMES.get(m, m).capitalize()}: чередуй между → {VARIETY_HINTS.get(MEAL_NAMES.get(m, m), "")}'
+            for m in data.meals
+        )
 
-{profile_str}
-"""
+        forbidden_dishes_block = ""
+        if previous_dishes:
+            dishes_list = "\n".join(f"  - {d}" for d in previous_dishes)
+            forbidden_dishes_block = f"""
+    ЗАПРЕЩЁННЫЕ БЛЮДА (уже были в предыдущем плане, НЕ повторять):
+    {dishes_list}
+    """
 
-        if data.cooking_time:
-            prompt += f"- Максимальное время готовки одного блюда: {data.cooking_time} минут\n"
+        correction_block = ""
+        if data.correction_prompt:
+            correction_block = f"""
+    ВАЖНОЕ ПОЖЕЛАНИЕ ПОЛЬЗОВАТЕЛЯ (наивысший приоритет, обязательно учти):
+    {data.correction_prompt}
+    """
 
         if data.available_products:
-            prompt += f"- Продукты под рукой (приоритет, но можно добавлять другие): {data.available_products}\n"
+            products_block = (
+                f"- Продукты под рукой (используй в приоритете, но не ограничивайся): "
+                f"{data.available_products}"
+            )
         else:
-            prompt += "- Продукты под рукой: не указаны. Используй разнообразные продукты на своё усмотрение, не ограничивайся курицей и помидорами.\n"
-        if data.cuisine:
-            prompt += f"- Предпочитаемая кухня: {data.cuisine}\n"
+            products_block = (
+                "- Доступные продукты: любые. Выбирай разнообразно — "
+                "не зацикливайся на одних и тех же (яйца, помидоры, моцарелла и т.п.)."
+            )
 
-        prompt += f"""
+        prompt = f"""Ты — профессиональный диетолог и шеф-повар. \
+    Составь разнообразный сбалансированный план питания на {data.days} дней.
+    {correction_block}
+    ━━━ ПРОФИЛЬ ━━━
+    {profile_str.strip()}
 
-СТРОГИЕ ПРАВИЛА:
-1. Сгенерируй ТОЛЬКО эти приёмы пищи: {meals_str}.
-   Не добавляй завтрак, обед или ужин, если они не указаны.
-2. Если указан только один приём (например, "перекус") — составь только его.
-3. Составь ровно {len(data.meals)} блюд на каждый день — ни больше, ни меньше.
-4. Используй ТОЛЬКО эти типы в поле type: {meals_str}.
-   Для перекуса — type: "перекус", для завтрака — type: "завтрак",
-   для обеда — type: "обед", для ужина — type: "ужин".
-5. Блюда не должны повторяться. Разнообразь ингредиенты.
-6. Если продукты под рукой не указаны — выбирай любые продукты на своё усмотрение.
+    ━━━ ПАРАМЕТРЫ ━━━
+    - Приёмы пищи: {meals_str}
+    - Количество дней: {data.days}
+    {"- Максимальное время приготовления: " + str(data.cooking_time) + " минут" if data.cooking_time else ""}
+    {"- Кухня: " + data.cuisine if data.cuisine else ""}
+    {products_block}
+    {forbidden_dishes_block}
+    ━━━ РАЗНООБРАЗИЕ (обязательно) ━━━
+    {variety_block}
 
-Верни ответ строго в формате JSON, без markdown-обёртки:
-{{
-    "days": [
-        {{
-            "day": 1,
-            "meals": [
-                {{
-                    "type": "завтрак",
-                    "name": "Название блюда",
-                    "ingredients": ["список"],
-                    "cooking_time": 15,
-                    "recipe": "Краткое описание"
-                }},
-                ...ровно {len(data.meals)} блюд на день...
-            ]
-        }},
-        ...ровно {data.days} дней...
-    ]
-}}
-"""
-        if data.correction_prompt:
-            prompt += f"\nКОРРЕКТИРОВКА ОТ ПОЛЬЗОВАТЕЛЯ (обязательно учти): {data.correction_prompt}\n"
+    - Каждый день должен использовать РАЗНЫЕ основные источники белка.
+    Чередуй по дням: {", ".join(PROTEINS[:data.days + 2])}
+    - Каждый день — разные методы приготовления:
+    варка, жарка, запекание, тушение, гриль, на пару, сыроедение
+    - НЕ используй одни и те же ингредиенты как основу более 2 раз за весь план.
+    (Например, если яйца были в завтраке дня 1 — в дне 2 завтрак должен быть другим.)
 
+    ━━━ СТРОГИЕ ПРАВИЛА ━━━
+    1. Генерируй ТОЛЬКО эти приёмы пищи: {meals_str}. Никаких лишних.
+    2. Ровно {meals_count} блюда на каждый день — не больше, не меньше.
+    3. Типы в поле "type" строго: {meals_str}.
+    4. Все {data.days * meals_count} блюд должны быть УНИКАЛЬНЫМИ — никаких повторов по названию и составу.
+    5. Учитывай аллергии и запрещённые продукты из профиля — они не должны появляться нигде.
+    6. Приоритетные/любимые продукты из профиля используй чаще.
+    7. Порции и КБЖУ должны быть реалистичными для обычного человека.
+
+    ━━━ ФОРМАТ ОТВЕТА ━━━
+    Верни ТОЛЬКО валидный JSON без markdown-обёртки, без комментариев:
+    {{
+        "days": [
+            {{
+                "day": 1,
+                "meals": [
+                    {{
+                        "type": "завтрак",
+                        "name": "Конкретное название блюда",
+                        "ingredients": ["ингредиент 1", "ингредиент 2"],
+                        "cooking_time": 15,
+                        "recipe": "Краткое описание приготовления (2-3 предложения)"
+                    }}
+                ]
+            }}
+        ]
+    }}
+    Ровно {data.days} объектов в "days". Ровно {meals_count} объектов в каждом "meals".
+    """
         return prompt
 
     async def delete_plan(self, plan_id: UUID) -> None:

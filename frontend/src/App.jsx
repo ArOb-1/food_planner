@@ -13,28 +13,31 @@ import Groups from './pages/Groups'
 import GroupDetail from './pages/GroupDetail'
 import { Toaster } from 'react-hot-toast'
 import Donate from './pages/Donate'
+import { PdfProvider } from './components/PdfContext'
 
 export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right"/>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Landing />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/donate" element={<Donate />} />
-            <Route path="/groups" element={<Groups />} />
-            <Route path="/groups/:id" element={<GroupDetail />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/generate" element={<GeneratePlan />} />
-            <Route path="/plans" element={<MyPlans />} />
-            <Route path="/plans/:id" element={<PlanDetail />} />
+      <PdfProvider> 
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Landing />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<Login />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/donate" element={<Donate />} />
+              <Route path="/groups" element={<Groups />} />
+              <Route path="/groups/:id" element={<GroupDetail />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/generate" element={<GeneratePlan />} />
+              <Route path="/plans" element={<MyPlans />} />
+              <Route path="/plans/:id" element={<PlanDetail />} />
+            </Route>
           </Route>
-        </Route>
-      </Routes>
+        </Routes>
+      </PdfProvider> 
     </BrowserRouter>
   )
 }
